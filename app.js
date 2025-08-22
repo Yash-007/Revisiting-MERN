@@ -4,8 +4,11 @@ const app = express();
 const jwt = require("jsonwebtoken");
 const {Product} = require("./models/ProductModel");
 const User = require("./models/UserModel");
+const rateLimiter = require('./middleware/rateLimitter');
+
 
 app.use(express.json());
+app.use(rateLimiter);
 
 connectDB();
 
@@ -109,7 +112,57 @@ app.post("/api/login", async(req,res)=> {
             message: error.message || "Internal server error",
         });
     }
-})
+});
+
+app.get("/api/products", async(req, res)=>{
+   const {page = 1, limit = 10} = req.query;
+
+   try {
+       const products = await Product.find().skip((page-1)*limit).limit(limit);
+       res.status(200).json({
+        message: "Products found successfully",
+        products,
+       });
+   } catch (error) {
+      console.error(error.message);
+      res.status(500).json({
+        message:error.message || "Internal server error",
+      });
+   }
+});
+
+ app.get("/api/top/products/:idi", async(req, res, next)=> {
+    try {
+        const idi = req.params.idi;
+        console.log(idi);
+        // const products = await Product.aggregate([
+        //     {$sort: {price: -1}}, 
+        //     {$limit: 3},
+        // ]);
+
+        const products = await Product.aggregate([
+            {$match: {name:{$regex: "text", options: 'i'}}}
+        ]).sort({price: -1}).limit(10);
+
+        res.status(200).json({
+            message: "Products found successfully",
+            products,
+        })
+    } catch (error) {
+        next(error)
+        console.error(error.message);
+        res.status(500).json({
+          message:error.message || "Internal server error",
+        });
+    }
+ });
+
+ app.use((err, req, res, next) => {
+   console.error(err);
+   res.status(500).json({
+   message: "Internal server error"
+   });
+ });
 
 app.listen(PORT, ()=> {
     console.log("server is running fine");
